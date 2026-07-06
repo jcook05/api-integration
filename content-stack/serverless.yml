@@ -1,0 +1,73 @@
+service: content-stack
+
+plugins:
+  - serverless-plugin-canary-deployments
+  - serverless-add-api-key
+
+provider:
+  name: aws
+  region: your-region
+  runtime: python3.14
+  stage: ${opt:stage, 'dev'}
+  lambdaHashingVersion: '20201221'
+  iam:
+    role:
+      managedPolicies:
+        - 'iam-policy-arn'
+        - 'iam-policy-arn'
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - codedeploy:*
+      Resource:
+        - "*"
+  environment:
+    topicarn: sns_topic_arn
+    slack_channel: slack_channel_url
+    key_id: your_key_id
+
+custom:
+  apiKeys:
+    - name: key-name
+      usagePlan:
+        name: usage-plan-name
+  ### Deployment Settings: will leverage CloudWatch and CodeDeploy to implement a Canary deployment 
+  ## using Lambda Function aliases
+  # deploymentSettings:
+  #   alias: live
+  #     # preTrafficHook: 
+  #     #   name: existingPreTrafficHookFunctionName
+  #     #   arn: function arn
+  #     # postTrafficHook: 
+  #     #   name: existingPostTrafficHookFunctionName
+  #     #   arn: function arn
+  #   stages:
+  #     - prod
+  #   type: Linear10PercentEvery1Minute
+  # alerts:
+  #   dashboards: true
+  #   stages:
+  #     - prod
+functions:
+  contentstack:
+    handler: handler.contentstack
+    events:
+      - http:
+          path: /
+          method: post
+          cors: false
+          async: false
+          private: true
+          authorizer: 
+            name: authorizer
+            type: request
+    deploymentSettings:
+      alias: live
+      type: Linear10PercentEvery1Minute
+    vpc:
+      securityGroupIds:
+        - your-sg-id
+      subnetIds:
+        - your-subnet-id
+  authorizer:
+    handler: handler.lambda_authorizer

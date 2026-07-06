@@ -1,0 +1,87 @@
+service: aftership-webhook
+
+plugins:
+  - serverless-add-api-key
+  - serverless-plugin-canary-deployments
+
+custom:
+  apiKeys:
+    - name: api-processing
+      usagePlan:
+        name: api-example
+  slackChannel: 
+    dev: dev-url
+    test: test-url
+    prod: prod-url
+  slackErrors: 
+    dev:  dev-url
+    test: test-url
+    prod: prod-url
+  
+  ### Deployment Settings: will leverage CloudWatch and CodeDeploy to implement a Canary deployment 
+  ## using Lambda Function aliases
+  # deploymentSettings:
+  #   alias: live
+  #     # preTrafficHook: 
+  #     #   name: existingPreTrafficHookFunctionName
+  #     #   arn: function arn
+  #     # postTrafficHook: 
+  #     #   name: existingPostTrafficHookFunctionName
+  #     #   arn: function arn
+  #   stages:
+  #     - prod
+  #   type: Linear10PercentEvery1Minute
+  # alerts:
+  #   dashboards: true
+  #   stages:
+  #     - prod
+  
+provider:
+  name: aws
+  region: <your-aws-region>
+  runtime: python3.14
+  lambdaHashingVersion: '20201221'
+  stage: ${opt:stage, 'dev'}
+  iam:
+    role:
+      managedPolicies:
+        - 'iam policy arn'
+        - 'iam policy arn'
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - codedeploy:*
+      Resource:
+        - "*"
+  environment:
+    slack_channel: ${self:custom.slackChannel.${self:provider.stage}}
+    slack_errors: ${self:custom.slackErrors.${self:provider.stage}}
+    key_id: api-gateway-key-id 
+    key_name: /ssm/parameter/name
+    webhook_secret: 'your-aftership-webhook-secret' #Find in AfterShip dashboard
+functions:
+  aftership:
+    handler: handler.aftership
+    events:
+      - http:
+          path: /
+          method: post
+          cors: false
+          async: false
+          private: true
+          authorizer: 
+            name: authorizer
+            type: request
+            identitySource:
+            -  method.request.header.X-Api-Key
+    vpc:
+      securityGroupIds:
+        - <your-security-group-id>
+      subnetIds:
+        - <your-subnet-id>
+    # deploymentSettings:
+    #   alias: live
+    #   type: Linear10PercentEvery1Minute
+ 
+  authorizer:
+    handler: handler.lambda_authorizer
